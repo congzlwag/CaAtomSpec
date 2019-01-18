@@ -1,0 +1,4 @@
+rm -rf build
+rm testa.cpython-36m-darwin.so
+python3 setup.py build
+mv build/lib.macosx-10.6-x86_64-3.6/testa.cpython-36m-darwin.so .

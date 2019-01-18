@@ -1,0 +1,5 @@
+State					18s		16d
+Life-time				5us 	11us
+Stark shift @ 10V/mm 	-0.3GHz	-0.7GHz
+Major decay				4p		4p
+Major decay rate		97/ms	49/ms

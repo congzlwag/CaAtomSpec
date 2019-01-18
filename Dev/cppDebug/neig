@@ -1,0 +1,3 @@
+rm numeroveig
+g++ -std=c++11 -I ./custom_headers -o numeroveig numerov_eig.cpp
+./numeroveig

@@ -1,0 +1,4 @@
+rm -rf build
+rm numerov.cpython-36m-darwin.so
+python3 setupc.py build
+mv build/lib.macosx-10.6-x86_64-3.6/numerov.cpython-36m-darwin.so .
