@@ -3,7 +3,7 @@ import numpy as np
 from sys import path, argv
 typ = argv[1]
 if typ == "numerov":
-	from numerov import integrate
+	from numerov import integratecd 
 elif typ == "numeroveig":
 	from numeroveig import integrate, eigensolve
 else:

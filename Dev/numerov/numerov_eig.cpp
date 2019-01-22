@@ -299,7 +299,7 @@ void initVecF(const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & f
 	// f_.resiz(n_samp);
 	for(size_t i=0; i<n_samp; i++)
 		f_[i] = 1 - dx2t2o3*mu*r_[i]*xpot_[i];
-}
+}e
 
 void initVecP(double energy, const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & p_){
 	for(size_t i=0; i<n_samp; i++)
