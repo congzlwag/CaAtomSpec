@@ -1,0 +1,4 @@
+rm -rf build
+rm numeroveig.cpython-36m-darwin.so
+python3 setupceig.py build
+mv build/lib.macosx-10.6-x86_64-3.6/numeroveig.cpython-36m-darwin.so .

@@ -23,6 +23,7 @@
 static PyObject * NumerovIntegration(PyObject *self, PyObject *args);
 static PyObject * NumerovEigensolve(PyObject *self, PyObject *args);
 static PyObject * NumerovSOCXi(PyObject *self, PyObject *args);
+// static PyObject * NumerovDEBUG(PyObject *self, PyObject *args);
 
 static PyMethodDef module_methods[] = {
   // "Python name", C function,  arg_representation, doc
@@ -31,19 +32,21 @@ static PyMethodDef module_methods[] = {
   "Given energy, inward integrate Numerov wavefunction\n"
   "Return 2 arrays: u_k & r_k"},
   {"eigensolve", (PyCFunction)NumerovEigensolve, METH_VARARGS, 
-  "numerove.eigensolve(l, j, e_estimate, Uparams, dx, rmax):\n"
+  "numerov.eigensolve(l, j, e_estimate, Uparams, dx, rmax):\n"
   "Solve the eigen function & eigen energy (near e_estimate) with Numerov difference form.\n"
   "Return: eigen energy, u_k, r_k"},
-  {"socXi",(PyCFunction)NumerovSOCXi, METH_VARARGS, ""}
+  {"socXi",(PyCFunction)NumerovSOCXi, METH_VARARGS, "numerov.socXi"},
+  // {"debug",(PyCFunction)NumerovDEBUG, METH_VARARGS, "numerov.debug"},
+  {NULL, NULL, 0, NULL}
 };
 
 #if PY_MAJOR_VERSION >= 3
   static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT, "numerov",
+    PyModuleDef_HEAD_INIT, "numeroveig",
     "Numerov method for the single electron in a central potential by a full-shell nuclei",
      -1, module_methods, NULL, NULL, NULL, NULL, };
 
-  PyMODINIT_FUNC PyInit_numerov(void) {
+  PyMODINIT_FUNC PyInit_numeroveig(void) {
     PyObject * m;
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
@@ -56,9 +59,9 @@ static PyMethodDef module_methods[] = {
     return m;
   }
 #else
-  PyMODINIT_FUNC initnumerov(void) {
+  PyMODINIT_FUNC initnumeroveig(void) {
     PyObject * m;
-    m = Py_InitModule3("numerov", module_methods, "Numerov method for the single electron in a central potential by a full-shell nuclei");
+    m = Py_InitModule3("numeroveig", module_methods, "Numerov method for the single electron in a central potential by a full-shell nuclei");
     if (m == NULL) return;
     //  import Numpy API
     import_array();
@@ -91,6 +94,7 @@ void doMesh(Vec<double> & r_);
 PyObject * castNPYArray(const Vec<double> & v_);
 
 // Core function
+double trapzNorm(const Vec<double> & u_, const Vec<double> & r_);
 void integ(double energy, const Vec<double> & r_, Vec<double> & y_, double init1, double init2);
 static PyObject * NumerovIntegration(PyObject * self, PyObject * args){
 	double rmin, energy, init1, init2;
@@ -107,6 +111,7 @@ static PyObject * NumerovIntegration(PyObject * self, PyObject * args){
 	integ(energy, r_, y_, init1, init2);
 	// convert y_ that is at the moment R(r)*r^{3/4} into u(r) = R(r)*r
 	for(size_t k=0; k<n_samp; k++) y_[k] = y_[k]*pow(r_[k],0.25);
+	y_ /= sqrt(trapzNorm(y_, r_));
 	PyObject * u_ = castNPYArray(y_);
 	PyObject * ri_= castNPYArray(r_);
 	y_.destruct();
@@ -132,6 +137,7 @@ static PyObject * NumerovEigensolve(PyObject * self, PyObject * args){
 	eigval = eigen(einit, r_, y_);
 	// convert y_ that is at the moment R(r)*r^{3/4} into u(r) = R(r)*r
 	for(size_t k=0; k<n_samp; k++) y_[k] = y_[k]*pow(r_[k],0.25);
+	y_ /= sqrt(trapzNorm(y_, r_));
 	PyObject * u_ = castNPYArray(y_);
 	PyObject * ri_ = castNPYArray(r_);
 	r_.destruct();
@@ -168,7 +174,7 @@ void doMesh(Vec<double> & r_){
 }
 
 // Implementation
-void initVecWOver8mur(const Vec<double> & r_, Vec<double> & xpot_, Vec<double> * ebound_=NULL);
+void initVecWOver8mur(const Vec<double> & r_, Vec<double> & xpot_, double * const ebound_=NULL);
 void initVecF(const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & f_);
 void initVecP(double energy, const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & p_);
 void integ(double energy, const Vec<double> & r_, Vec<double> & y_, double init1, double init2){
@@ -252,9 +258,9 @@ double radEffPot(double r){
 	Veff^{(lj)}(r) = U(r) + \frac{l(l+1)}{2\mu r} + \frac{\alpha^2}{4}(j(j+1)-l(l+1)-s(s+1))\frac{d U(r)}{r dr}
 	*/
 	double effCharge,res;
-	effCharge = CoreValency; //+(Z-CoreValency)*exp(-a1*r)-r*(a3+a4*r)*exp(-a2*r);
+	effCharge = CoreValency+(Z-CoreValency)*exp(-a1*r)-r*(a3+a4*r)*exp(-a2*r);
 	// corePotU
-	res = effCharge / r ; //- alphaD/(2*pow(r,4)) * (1-exp(-pow(r/rc,6)));
+	res = - effCharge / r - alphaD/(2*pow(r,4)) * (1-exp(-pow(r/rc,6)));
 	// centrifugal
 	res += hfL2 / (mu*r*r);
 	if(j<0) // SOC ignored
@@ -269,11 +275,10 @@ double WOver8mur(double r){
 	return radEffPot(r)+3/(32*mu*r*r);
 }
 
-void initVecWOver8mur(const Vec<double> & r_, Vec<double> & xpot_, Vec<double> * ebound_){
+void initVecWOver8mur(const Vec<double> & r_, Vec<double> & xpot_, double * const ebound_){
 	// xpot_.resiz(n_samp);
 	size_t i=0;
 	if(ebound_!=NULL){
-		ebound_->resiz(2);
 		double elw, eup, et;
 		elw = eup = xpot_[i] = WOver8mur(r_[i]);
 		for(i=1;i<n_samp;i++){
@@ -281,12 +286,13 @@ void initVecWOver8mur(const Vec<double> & r_, Vec<double> & xpot_, Vec<double> *
 			if(et<elw) elw = et;
 			if(et>eup) eup = et;
 		}
-		(*ebound_)[0] = elw;
-		(*ebound_)[1] = eup;
-		return;
+		ebound_[0] = elw;
+		ebound_[1] = eup;
 	}
-	for(i=0; i<n_samp; i++)
-		xpot_[i] = WOver8mur(r_[i]);
+	else{
+		for(i=0; i<n_samp; i++)
+			xpot_[i] = WOver8mur(r_[i]);
+	}
 }
 
 void initVecF(const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & f_){
@@ -299,6 +305,27 @@ void initVecP(double energy, const Vec<double> & r_, const Vec<double> & xpot_, 
 	for(size_t i=0; i<n_samp; i++)
 		p_[i] = dx2t2o3*mu*r_[i]*(energy-xpot_[i]);
 }
+
+// static PyObject * NumerovDEBUG(PyObject *self, PyObject *args){
+// 	double rmin, energy, init1, init2;
+// 	PyArrayObject * Uparams;
+// 	if(!(PyArg_ParseTuple(args,"iddOddddd", &l, &j, &energy, &Uparams, &rmin, &rmax, &dx, &init1, &init2)))
+// 		return NULL;
+// 	setUParams(Uparams);
+	
+// 	calcAuxParams(sqrt(rmin));
+// 	Vec<double> r_(n_samp);
+// 	doMesh(r_);
+
+// 	Vec<double> xpot_(n_samp);
+// 	for(size_t i=0; i<n_samp; i++){
+// 		xpot_[i] = WOver8mur(r_[i]);
+// 	}
+// 	// initVecWOver8mur(r_, xpot_);
+// 	// Vec<double> gh2o12_(n_samp);
+// 	// initVecP(energy, r_, xpot_, gh2o12_);
+// 	return Py_BuildValue("(OO)", castNPYArray(xpot_), castNPYArray(r_));
+// }
 
 double eigen(double Einit, const Vec<double> & r_, Vec<double> & v){
 	/*
@@ -414,6 +441,18 @@ double invPower(const Triband<double> & T, Vec<double> & V, const Triband<double
     u.destruct();
     w.destruct();
     return eigval+eval0;
+}
+
+double trapzNorm(const Vec<double> & u_, const Vec<double> & r_){
+	double uj_1_square=0, ret=0, r_temp=0, uj_square;
+	size_t j;
+	for(j=0; j<n_samp; j++){
+		uj_square = u_[j]*u_[j];
+		ret += (r_[j]-r_temp)*(uj_square+uj_1_square)*0.5;
+		r_temp = r_[j];
+		uj_1_square = uj_square;
+	}
+	return ret;
 }
 
 PyObject * castNPYArray(const Vec<double> & v_){

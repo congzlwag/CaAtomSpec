@@ -27,8 +27,9 @@ double mu;
 static PyObject * numerovError;
 
 static PyObject * NumerovIntegration(PyObject *self, PyObject *args);
-static PyObject * NumerovEigensolve(PyObject *self, PyObject *args);
-static PyObject * Test(PyObject * self);
+// static PyObject * NumerovEigensolve(PyObject *self, PyObject *args);
+// static PyObject * Test(PyObject * self);
+static PyObject * NumerovDEBUG(PyObject *self, PyObject *args);
 
 static PyMethodDef module_methods[] = {
   // "Python name", C function,  arg_representation, doc
@@ -39,10 +40,12 @@ static PyMethodDef module_methods[] = {
   ""},
   // {"eigensolve", NumerovEigensolve, METH_VARARGS, "Solve the eigen function & eigen energy with Numerov algorithm"},
   // {"test", (PyCFunction)Test, METH_NOARGS, "Playground"},
+  {"debug", NumerovDEBUG, METH_VARARGS,"numerov.debug(innerLimit, outerLimit, step, init1, init2, "
+  "l, s, j, stateEnergy, alphaD, Z, CoreValency, a1, a2, a3, a4, rc, mu)"},
   {NULL, NULL, 0, NULL}
 };
 
-#if PY_MAJOR_VERSION >= 3
+// #if PY_MAJOR_VERSION >= 3
   static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT, "numerov",
     "Numerov method for the single electron in a central potential by a full-shell nuclei",
@@ -51,7 +54,7 @@ static PyMethodDef module_methods[] = {
   PyMODINIT_FUNC PyInit_numerov(void) {
     PyObject * m;
     m = PyModule_Create(&moduledef);
-    if (m == NULL) return;
+    if (m == NULL) return NULL;
     // import Numpy API
     import_array();
     //  creating numerovError
@@ -61,26 +64,26 @@ static PyMethodDef module_methods[] = {
 
     return m;
   }
-#else
-  PyMODINIT_FUNC initnumerov(void) {
-    PyObject * m;
-    m = Py_InitModule3("numerov", module_methods, "Numerov method for the single electron in a central potential by a full-shell nuclei");
-    if (m == NULL) return;
-    //  import Numpy API
-    import_array();
-    //  creating numerovError
-    numerovError = PyErr_NewException("numerov.error", NULL, NULL);
-    Py_INCREF(numerovError);
-    PyModule_AddObject(m, "error", numerovError);
-  }
-#endif
+// #else
+//   PyMODINIT_FUNC initnumerov(void) {
+//     PyObject * m;
+//     m = Py_InitModule3("numerov", module_methods, "Numerov method for the single electron in a central potential by a full-shell nuclei");
+//     if (m == NULL) return;
+//     //  import Numpy API
+//     import_array();
+//     //  creating numerovError
+//     numerovError = PyErr_NewException("numerov.error", NULL, NULL);
+//     Py_INCREF(numerovError);
+//     PyModule_AddObject(m, "error", numerovError);
+//   }
+// #endif
 
 // =========== Playground ===================
 
-static PyObject * Test(PyObject * self){
-  std::cout<<"Hello World!";
-  return Py_None;
-}
+// static PyObject * Test(PyObject * self){
+//   std::cout<<"Hello World!";
+//   return Py_None;
+// }
 
 
 // =========== variable definition ===========
@@ -89,8 +92,6 @@ int totalLength;
 double* sol;
 double* r;
 double xmin, dx, ddx12, rmin, rmax;
-
-// double (*RadEffPot)(double);
 
 npy_intp dims[2];
 PyObject* narray;
@@ -139,13 +140,15 @@ double RadialEffPotential2(double r){
     return -CoreValency/r  + alpha2/2.0*commonTerm1*CorePotentialXi(r) + commonTerm2/(mu*r*r);
 }
 
-double gFun(double r){ // the d2y/dx2 = g(r) y(x)
+double gFun(double x){ // the d2y/dx2 = g(r) y(x)
   // with potential for l<4
+  double r = x*x;
   return 8*r*mu*(stateEnergy-RadialEffPotential(r));
 }
 
-double gFun2(double r){ // the d2y/dx2 = g(r) y(x)
+double gFun2(double x){ // the d2y/dx2 = g(r) y(x)
   // with potential for l>=4
+  double r = x*x;
   return 8*r*mu*(stateEnergy-RadialEffPotential2(r));
 }
 
@@ -180,10 +183,67 @@ double gFun2(double r){ // the d2y/dx2 = g(r) y(x)
 //   return icl;
 // }
 
+static PyObject * NumerovDEBUG(PyObject *self, PyObject *args){
+  double innerLimit,outerLimit,step,init1,init2;
+  double x,step2;
+  int br, i;
+
+    if (!(PyArg_ParseTuple(args, "dddddiddddiidddddd", 
+      &innerLimit, &outerLimit, &step, &init1, &init2,
+      &l, &s, &j, &stateEnergy, &alphaD,
+      &Z, &CoreValency, &a1, &a2, &a3, &a4, &rc, &mu))) return NULL;
+
+#ifdef DEBUG_OUTPUT
+    printf("innerLimit\t=\t%.3f\nouterLimit\t=\t%.3f\nstep\t=\t%.3f\ninit1\t=\t%.3f\ninit2\t=\t%.3f\n",innerLimit,outerLimit,step,init1,init2);
+    printf("l\t=\t%i\ns\t=\t%.1f\nj\t=\t%.1f\n",l,s,j);
+    printf("stateEnergy\t=\t%.7f\nalphaD\t=\t%.3f\nalpha\t=\t%.3f\nZ\t=\t%i\n",stateEnergy,alphaD,sqrt(alpha2),Z);
+    printf("a1\t\t%.4f\na2\t\t%.4f\na3\t\t%.4f\na4\t\t%.4f\nrc\t\t%.4f\n",a1,a2,a3,a4,rc);
+    printf("mu\t\t%.4f",mu);
+#endif
+
+  // let's speed up calculation by calculating some common terms beforehand
+  commonTerm1 = (j*(j+1.0)-((double)l)*(l+1.0)-s*(s+1.))/2.0;
+  commonTerm2 = 0.5*(l+0.25)*(l+0.75);
+
+  totalLength =  (int)((sqrt(outerLimit)-sqrt(innerLimit))/step);
+  step2 = step*step;
+
+#ifdef DEBUG_OUTPUT
+  printf("Index = %i\n",totalLength);
+  // printf("Index should be about = %.2f\n",(sqrt(outerLimit)-sqrt(innerLimit))/step);
+#endif
+
+  br = totalLength;
+  sol = (double*) malloc(br*sizeof(double));
+  if (!sol){
+// #ifdef DEBUG_OUTPUT
+//     printf("Memory allocaiton failed! Aborting.");
+// #endif
+    PyErr_SetString(numerovError, "Memory allocaiton failed! Aborting");
+    return NULL;
+  }
+  npy_intp dim1[1] = {totalLength};
+  PyObject * r_ = PyArray_SimpleNew(1,dim1,NPY_DOUBLE);
+  double * ptr = (double *)PyArray_GETPTR1((PyArrayObject *)r_,0);
+  for(i=0; i<totalLength; i++){
+    x = sqrt(innerLimit)+i*step;
+    ptr[i] = x*x;
+    // sol[i] = gFun(x)*step2/12;
+    sol[i] = RadialEffPotential(x*x);
+  }
+  
+  narray = PyArray_SimpleNewFromData(1, dim1, NPY_DOUBLE, sol);
+  //free(sol); # freeing of solution array should be done from Numpy
+  // this is the critical line - tell numpy it has to free the data
+  PyArray_ENABLEFLAGS((PyArrayObject*)narray, NPY_ARRAY_OWNDATA);
+  return Py_BuildValue("(OO)",narray,r_);
+}
+
 static PyObject * NumerovIntegration(PyObject *self, PyObject *args) {
   // Numerov arguments: innerLimit,outerLimit,gFun,step,init1,init2
   double innerLimit,outerLimit,step,init1,init2;
-  double x,step2,maxValue,r;
+  double x,step2,maxValue;
+  int br, i;
 
     if (!(PyArg_ParseTuple(args, "dddddiddddiidddddd", 
       &innerLimit, &outerLimit, &step, &init1, &init2,
@@ -208,7 +268,7 @@ static PyObject * NumerovIntegration(PyObject *self, PyObject *args) {
 
 #ifdef DEBUG_OUTPUT
   printf("Index = %i\n",totalLength);
-  printf("Index should be about = %.2f\n",(sqrt(outerLimit)-sqrt(innerLimit)/step));
+  // printf("Index should be about = %.2f\n",(sqrt(outerLimit)-sqrt(innerLimit))/step);
 #endif
 
   br = totalLength;

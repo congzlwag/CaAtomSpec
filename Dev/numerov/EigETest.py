@@ -32,7 +32,7 @@ paramss = np.load("../modelPot/4param/M_Aymar_1991_J_Phys_B_24.npy")
 # def Diff(l,n_,j_,e_,params,dx=5e-4):
 # 	N = n_.size
 # 	assert N==e_.size
-# 	if j_ is None:
+# 	if j_ iupyis None:
 # 		j_ = [None]*N
 # 	resid = []
 # 	for k in range(N):
