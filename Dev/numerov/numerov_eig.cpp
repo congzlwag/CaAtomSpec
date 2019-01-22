@@ -42,11 +42,11 @@ static PyMethodDef module_methods[] = {
 
 #if PY_MAJOR_VERSION >= 3
   static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT, "numeroveig",
+    PyModuleDef_HEAD_INIT, "numerov",
     "Numerov method for the single electron in a central potential by a full-shell nuclei",
      -1, module_methods, NULL, NULL, NULL, NULL, };
 
-  PyMODINIT_FUNC PyInit_numeroveig(void) {
+  PyMODINIT_FUNC PyInit_numerov(void) {
     PyObject * m;
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
@@ -59,9 +59,9 @@ static PyMethodDef module_methods[] = {
     return m;
   }
 #else
-  PyMODINIT_FUNC initnumeroveig(void) {
+  PyMODINIT_FUNC initnumerov(void) {
     PyObject * m;
-    m = Py_InitModule3("numeroveig", module_methods, "Numerov method for the single electron in a central potential by a full-shell nuclei");
+    m = Py_InitModule3("numerov", module_methods, "Numerov method for the single electron in a central potential by a full-shell nuclei");
     if (m == NULL) return;
     //  import Numpy API
     import_array();
@@ -299,7 +299,7 @@ void initVecF(const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & f
 	// f_.resiz(n_samp);
 	for(size_t i=0; i<n_samp; i++)
 		f_[i] = 1 - dx2t2o3*mu*r_[i]*xpot_[i];
-}e
+}
 
 void initVecP(double energy, const Vec<double> & r_, const Vec<double> & xpot_, Vec<double> & p_){
 	for(size_t i=0; i<n_samp; i++)
