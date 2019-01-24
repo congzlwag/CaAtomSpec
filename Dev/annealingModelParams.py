@@ -3,22 +3,22 @@ import numpy as np
 from numpy import random as rdm
 from specPreProcess import cm_1_to_eV
 from sys import path
-path.append("./numerov")
-from numerov import eigE
+path.append("./Numerov")
+from numerov import eigensolve
 import time
 
-def eigEnergy(l,j,e_approx,params,dx,rmax):
-	if len(params) == 5:
-		a1,a2,a3,a4,rc = params
-	elif len(params) == 4:
-		a1,a2,a3,rc = params
-		a4 = 0
-	else:
-		raise ValueError("len(params) should be 4 or 5")
-	return eigE(l,j if j is not None else -1, e_approx,a1,a2,a3,a4,rc,dx,rmax)
+# def eigEnergy(l,j,e_approx,params,dx,rmax):
+# 	if len(params) == 5:
+# 		a1,a2,a3,a4,rc = params
+# 	elif len(params) == 4:
+# 		a1,a2,a3,rc = params
+# 		a4 = 0
+# 	else:
+# 		raise ValueError("len(params) should be 4 or 5")
+# 	return eigE(l,j if j is not None else -1, e_approx,a1,a2,a3,a4,rc,dx,rmax)
 
 # From M_Aymar_1991_J._Phys._B 24
-paramss = np.load("modelPot/4param/M_Aymar_1991_J_Phys_B_24.npy")
+paramss = np.load("modelPotUparams/4param/M_Aymar_1991_J_Phys_B_24.npy")
 # paramss = np.array([[  4.0099,   2.1315,  13.023 ,   1.6352], 
 # #3.02649,3.24448,12.84206,2.05081 ~ 0.452%
 # #3.77590,3.05022,12.97352,1.92428 ~ 0.577%
@@ -33,28 +33,31 @@ paramss = np.load("modelPot/4param/M_Aymar_1991_J_Phys_B_24.npy")
 # #3.53060,0.98481,12.59119,0.36529 ~ 0.574%
 params5s = np.hstack((paramss[:,:3],np.zeros((5,1)),paramss[:,3:]))
 
-datae = np.load('specs/CaII.npz')
+# datae = np.load('specs/CaII.npz')
 data_ebar = np.load('specs/CaII_ebar.npz')
 
 def Diff(l,n_,j_,e_,params,dx=5e-4):
 	N = n_.size
 	assert N==e_.size
 	if j_ is None:
-		j_ = [None]*N
+		j_ = [-1]*N
 	resid = []
 	for k in range(N):
 		# print(k,e_[k],end='\t',flush=True)
-		resid.append(e_[k]-eigEnergy(l,j_[k],e_[k], params, dx, n_[k]*2*(n_[k]+15)))
+		resid.append(e_[k]-eigensolve(l,j_[k],e_[k], params, dx, n_[k]*2*(n_[k]+15), False))
 		# print(resid[-1],flush=True)
 	return np.array(resid)
 
 def Loss(l,n_,j_,e_,params,dx=1e-3):
 	resid = Diff(l,n_,j_,e_,params,dx)
 	resid = (resid/e_)**2
-	return (resid.sum())**0.5
+	return (resid.mean())**0.5
 
 def SimAnnealParams(l,SOC=True,n_param=5,T=4e-5,Tdecay=0.97,h=0.02,n_iter=50,sd=1):
-	h_params = np.ones(n_param)*h
+	if isinstance(h,float):
+		h_params = np.ones(n_param)*h
+	else:
+		h_params = np.asanyarray(h)
 	rdm.seed(sd)
 	fp = open("AnnealLog/SOC%s/%dparam/%d/%s.log"\
 		 %('' if SOC else "free",n_param,l,time.strftime("%m_%d_%Y-%H%M", time.localtime(int(time.time())))), 'w')
@@ -70,7 +73,7 @@ def SimAnnealParams(l,SOC=True,n_param=5,T=4e-5,Tdecay=0.97,h=0.02,n_iter=50,sd=
 	else:
 		data = data_ebar[str(l)]
 		j_ = None
-	los = Loss(l, data['n'],j_,data['energy/eV'], params)
+	los = Loss(l, data['n'],j_,data['energy/au'], params)
 	kkk = 0
 	print("#%d loss=%.5f"%(kkk,los), "("+",".join(["%.5f"%x for x in params])+")", "T=%.2g"%T)
 	print("#%d loss=%.5f"%(kkk,los), "("+",".join(["%.5f"%x for x in params])+")", "T=%.2g"%T,file=fp)
@@ -79,7 +82,7 @@ def SimAnnealParams(l,SOC=True,n_param=5,T=4e-5,Tdecay=0.97,h=0.02,n_iter=50,sd=
 		kkk_ = kkk+n_iter
 		while kkk < kkk_:
 			steps= (2*rdm.rand(params.size)-1)*h_params
-			los_ = Loss(l, data['n'],j_,data['energy/eV'], params+steps)
+			los_ = Loss(l, data['n'],j_,data['energy/au'], params+steps)
 			if los_<los or (los_>los and rdm.rand() < np.exp((los-los_)/T)):
 				params += steps
 				los = los_
@@ -87,19 +90,20 @@ def SimAnnealParams(l,SOC=True,n_param=5,T=4e-5,Tdecay=0.97,h=0.02,n_iter=50,sd=
 			print("#%d loss=%.5f"%(kkk,los), "("+",".join(["%.5f"%x for x in params])+")", "T=%.2g"%T,file=fp)
 			T *= Tdecay
 			kkk += 1
-		instruct = input("Continue for another %d iteration? (y/n)"%n_iter)
-		if not (instruct=='y' or instruct=='Y'):
+		instruct = input("Continue for another %d iteration? ([y]/n)"%n_iter)
+		if (instruct=='n' or instruct=='N' or instruct=='q'):
 			break
 	fp.close()
 
 if __name__ == '__main__':
-	# pass
-	print("This is a test on Diff")
-	for l in range(2):
-		print('L =',l)
-		data = data_ebar[str(l)]
-		print(data['energy/eV'])
-		print(Diff(l,data['n'],None,data['energy/eV'],paramss[l],5e-4))
+	params5s[2] = np.array([4.335780,  2.909370,  12.69389,  1.383540, 2.780150])
+	SimAnnealParams(2,False,5,T=10,Tdecay=0.98,h=[0.1,0.1,0.8,0.8,0.1],sd=928,n_iter=100)
+	# print("This is a test on Diff")
+	# for l in range(2,3):
+	# 	print('L =',l)
+	# 	data = data_ebar[str(l)]
+	# 	print(data['energy/au'])
+	# 	print(Diff(l,data['n'],None,data['energy/au'],params5s[l],5e-4))
 	
 	# l=0
 	# k=3

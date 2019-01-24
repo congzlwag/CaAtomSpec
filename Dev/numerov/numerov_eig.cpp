@@ -125,7 +125,8 @@ double eigen(double Einit, const Vec<double> & r_, Vec<double> & v);
 static PyObject * NumerovEigensolve(PyObject * self, PyObject * args){
 	double einit, eigval;
 	PyArrayObject * Uparams;
-	if(!(PyArg_ParseTuple(args,"iddOdd", &l, &j, &einit, &Uparams, &dx, &rmax)))
+	bool ret_vec;
+	if(!(PyArg_ParseTuple(args,"iddOddp", &l, &j, &einit, &Uparams, &dx, &rmax, &ret_vec)))
 		return NULL;
 	setUParams(Uparams);
 	calcAuxParams(dx);
@@ -135,6 +136,8 @@ static PyObject * NumerovEigensolve(PyObject * self, PyObject * args){
 	doMesh(r_);
 
 	eigval = eigen(einit, r_, y_);
+	if(!ret_vec)
+		return Py_BuildValue("d", eigval);
 	// convert y_ that is at the moment R(r)*r^{3/4} into u(r) = R(r)*r
 	for(size_t k=0; k<n_samp; k++) y_[k] = y_[k]*pow(r_[k],0.25);
 	y_ /= sqrt(trapzNorm(y_, r_));
