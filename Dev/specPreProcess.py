@@ -1,12 +1,14 @@
-from scipy.constants import h,c,e
+from scipy.constants import h,c,e, physical_constants
 import pandas as pd
 import numpy as np
 
 hc_in_eVcm = h*c/e*100
-elim = {'CaI':49305.96, 'CaII':95751.87}
+elim = {'CaI':-(49305.96 + 95751.87), 'CaII':-95751.87}
 
 def cm_1_to_eV(energy, limit='CaII'):
-	return hc_in_eVcm*(energy-elim[limit])
+	return hc_in_eVcm*(energy+elim[limit])
+
+eV_in_au = e/physical_constants['atomic unit of energy'][0]
 
 def appendColeV(limit, lmax):
 	npz = {}

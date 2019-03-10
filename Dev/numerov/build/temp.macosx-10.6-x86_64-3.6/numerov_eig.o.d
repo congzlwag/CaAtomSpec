@@ -1,1 +1,0 @@
-commandline: -I/usr/local/intelpython3/lib/python3.6/site-packages/numpy/core/include -I./ -I/usr/local/intelpython3/include/python3.6m -c-I/usr/local/intelpython3/lib/python3.6/site-packages/numpy/core/include -I./ -I/usr/local/intelpython3/include/python3.6m

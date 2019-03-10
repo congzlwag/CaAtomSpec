@@ -18,24 +18,43 @@
 #define SIMANN_MAXITER 100
 #define INTEGRATE_FROMLASTMAX_SUP 50
 
-#define DEBUG_OUTPUT
+// #define DEBUG_OUTPUT
 
 static PyObject * NumerovIntegration(PyObject *self, PyObject *args);
 static PyObject * NumerovEigensolve(PyObject *self, PyObject *args);
 static PyObject * NumerovSOCXi(PyObject *self, PyObject *args);
+static PyObject * UInnerProd1d(PyObject *self, PyObject *args);
 // static PyObject * NumerovDEBUG(PyObject *self, PyObject *args);
 
 static PyMethodDef module_methods[] = {
   // "Python name", C function,  arg_representation, doc
   {"integrate", (PyCFunction)NumerovIntegration, METH_VARARGS, 
   "numerov.integrate(l, j, energy, Uparams, rmin, rmax, dx, init1, init2):\n"
-  "Given energy, inward integrate Numerov wavefunction\n"
-  "Return 2 arrays: u_k & r_k"},
+  "Given energy, inward Numerov integrate radial wavefunction u\n"
+  "Parameters:\n"
+  "\tl: Orbit ang-momentum number\n"
+  "\tj: Total ang-momentum number. If ignore SOC, set a negative value\n"
+  "\tenergy: Exact value of enery level, directly used in integration\n"
+  "\tUparams: numpy 1D array of length 4 or 5. Parameters in the model potential. If Uparams.size==4, a4=0 by default, else if Uparams.size==5, fill in (a1,a2,a3,a4,rc) correspondingly\n"
+  "\trmin, rmax: Boundaries of the integration. Empirically rmax = n*2*(n+15) is enough\n"
+  "\tdx: Step length of x = r**0.5"
+  "\tinit1,init2: Two initial values for the integration that are assigned as\n"
+  "\t\ty[-1] = init2; y_[-2] = init1;\n"
+  "Return two 1D arrays: u_k & r_k"},
   {"eigensolve", (PyCFunction)NumerovEigensolve, METH_VARARGS, 
-  "numerov.eigensolve(l, j, e_estimate, Uparams, dx, rmax):\n"
+  "numerov.eigensolve(l, j, e_estimate, Uparams, dx, rmax, return_vec):\n"
   "Solve the eigen function & eigen energy (near e_estimate) with Numerov difference form.\n"
-  "Return: eigen energy, u_k, r_k"},
+  "Parameters:\n"
+  "\tl: Orbit ang-momentum number\n"
+  "\tj: Total ang-momentum number. If ignore SOC, set a negative value\n"
+  "\te_estimate: Estimated value of eigenenergy, which is the shift before inverse power iteration.\n"
+  "\tUparams: numpy 1D array of length 4 or 5. Parameters in the model potential. If Uparams.size==4, a4=0 by default, else if Uparams.size==5, fill in (a1,a2,a3,a4,rc) correspondingly\n"
+  "\tdx: Step length of x = r**0.5"
+  "\trmax: Boundary of the integration. Empirically rmax = n*2*(n+15) is enough\n"
+  "\treturn_vec: Bool value indicating whether to return the eigen vector.\n"
+  "Return: eigen_energy, u_k, r_k if return_vec else eigen_energy"},
   {"socXi",(PyCFunction)NumerovSOCXi, METH_VARARGS, "numerov.socXi"},
+  {"uInnerProd_1d",(PyCFunction)UInnerProd1d, METH_VARARGS, "numerov.uInnerProd"},
   // {"debug",(PyCFunction)NumerovDEBUG, METH_VARARGS, "numerov.debug"},
   {NULL, NULL, 0, NULL}
 };
@@ -74,7 +93,8 @@ static PyMethodDef module_methods[] = {
 
 // ================== Global Variables ==================
 int Z = 20, CoreValency = 2;
-double alphaD = 3.26, alpha2 = 5.325135447834466e-5;
+double alphaD = 3.5; // 3.26 from Opik 1967
+double alpha2 = 5.325135447834466e-5;
 size_t l=0;
 double j=0.5, mu=0.9999862724756698;
 // to ignore SOC, set j<0
@@ -107,7 +127,7 @@ static PyObject * NumerovIntegration(PyObject * self, PyObject * args){
 	Vec<double> r_(n_samp);
 	doMesh(r_);
 	Vec<double> y_(n_samp);
-
+	// main function for integration
 	integ(energy, r_, y_, init1, init2);
 	// convert y_ that is at the moment R(r)*r^{3/4} into u(r) = R(r)*r
 	for(size_t k=0; k<n_samp; k++) y_[k] = y_[k]*pow(r_[k],0.25);
@@ -192,6 +212,7 @@ void integ(double energy, const Vec<double> & r_, Vec<double> & y_, double init1
 	while(br>checkPoint && br>0){
 		br--;
 		y_[br] = (2*(1-5*gh2o12_[br+1])*y_[br+1]-(1+gh2o12_[br+2])*y_[br+2])/(1+gh2o12_[br]);
+		// maxValue traces the maximum amplitude of u
 		if((temp=fabs(y_[br]*pow(r_[br],0.25)))>maxValue){
 			maxValue = temp;
 		}
@@ -202,25 +223,43 @@ void integ(double energy, const Vec<double> & r_, Vec<double> & y_, double init1
 		}
 	}
 	divergePoint = 0;
-	while ((br>0)&&(divergePoint == 0)){
+	// u_1 = y_[br]*pow(r_[br],0.25), u_2=0;
+	// if (br<n_samp-1){
+	// 	u_2 = y_[br+1]*pow(r_[br+1],0.25);
+	// }
+	while (br>0 && divergePoint==0){
         br--;
 		y_[br] = (2*(1-5*gh2o12_[br+1])*y_[br+1]-(1+gh2o12_[br+2])*y_[br+2])/(1+gh2o12_[br]);
-        if ((temp=fabs(y_[br]*pow(r_[br],0.25)))>maxValue){
-            divergePoint = br;
-            while ((fabs(y_[divergePoint+1])<fabs(y_[divergePoint])) && (divergePoint<checkPoint)){
-                divergePoint +=1;
-            }
-            if (divergePoint>checkPoint){
-                  PyErr_SetString(PyExc_RuntimeError, "divergePoint not found");
-                  return;
-            }
-        }
+		temp = y_[br]*pow(r_[br],0.25);
+		// if ((temp-u_1)*(u_1-u_2)< 0 && u_1*temp>=0 && u_2*u_1>=0 && fabs(u_1)<=fabs(temp) && fabs(u_1)<=fabs(u_2)){
+		// 	divergePoint = br;
+		// }
+		// else{
+			// Supposedly, the highest maxima of u should correspond to the largest r
+	        if (fabs(temp) > maxValue){
+	            divergePoint = br;
+	        }
+	        // else{
+	        // 	u_2 = u_1;
+	        // 	u_1 = temp;
+	        // }
+		// }
+    }
+    while ((fabs(y_[divergePoint+1])<fabs(y_[divergePoint])) && (divergePoint<n_samp-1)){
+        divergePoint +=1;
+    }
+    if(divergePoint < checkPoint){
+    	
+	    // if (divergePoint>checkPoint){
+	    //       PyErr_SetString(PyExc_RuntimeError, "divergePoint not found");
+	    //       return;
+	    // }
+	    // RETURN RESULT - but set to zero divergent part (to prevent integration there)
+		for (br=0; br<divergePoint; br++) y_[br] = 0;
     }
     #ifdef DEBUG_OUTPUT
     std::cout<<"n_samp="<<n_samp<<", checkPoint="<<checkPoint<<", divergePoint="<<divergePoint<<std::endl;
     #endif
-    // RETURN RESULT - but set to zero divergent part (to prevent integration there)
-	for (br=0; br<divergePoint; br++) y_[br] = 0;
 
 	gh2o12_.destruct();
 	xpot_.destruct();
@@ -465,6 +504,51 @@ PyObject * castNPYArray(const Vec<double> & v_){
     for(long k=0; k<m[0]; k++)
         ptr[k] = v_[k];
     return out;
+}
+
+static PyObject * UInnerProd1d(PyObject * self, PyObject * args){
+	PyArrayObject * pyv;//, * pyav, * pyu, * pyau;
+	PyArrayObject * pyav;
+	PyArrayObject * pyu;
+	PyArrayObject * pyau;
+	if(!(PyArg_ParseTuple(args, "OOOO", &pyv, &pyav, &pyu, &pyau)))
+		return NULL;
+	if(PyArray_SIZE(pyv)!=PyArray_SIZE(pyav))
+		PyErr_SetString(PyExc_RuntimeError, "v.size!=av.size");
+	if(PyArray_SIZE(pyu)!=PyArray_SIZE(pyau))
+		PyErr_SetString(PyExc_RuntimeError, "u.size!=au.size");
+
+	double * v = (double *)(PyArray_GETPTR1(pyv,0));
+	double * u = (double *)(PyArray_GETPTR1(pyu,0));
+	double * av = (double *)(PyArray_GETPTR1(pyav,0));
+	double * au = (double *)(PyArray_GETPTR1(pyau,0));
+	long kv = 0, ku = 0;
+	double res, last_prod, current_r, av_last, v_last, au_last, u_last, prod, r_incr;
+	res= last_prod= current_r= av_last= v_last= au_last= u_last = 0;
+	while(kv<PyArray_SIZE(pyv) && ku<PyArray_SIZE(pyu)){
+		if(av[kv] <= au[ku]){
+			r_incr = av[kv]-current_r;
+			current_r = av[kv];
+			if(r_incr>0){
+				prod = v[kv]* (u_last + (u[ku]-u_last)/(au[ku]-au_last)*(current_r-au_last));
+				res += r_incr*0.5*(prod + last_prod);
+	        }
+            av_last = av[kv];
+            v_last = v[kv++];
+		}
+		else{
+			r_incr = au[ku]-current_r;
+			current_r = au[ku];
+			if(r_incr>0){
+				prod = u[ku]* (v_last + (v[kv]-v_last)/(av[kv]-av_last)*(current_r-av_last));
+	            res += r_incr*0.5*(prod + last_prod);
+			}
+            au_last = au[ku];
+            u_last = u[ku++];
+		}
+        last_prod = prod;
+	}
+	return Py_BuildValue("d",res);
 }
 
 // static PyObject * NumerovXi(PyObject * self, PyObject * args){
