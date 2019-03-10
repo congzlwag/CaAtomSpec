@@ -18,30 +18,30 @@ paramss = np.load('modelPotUparams/4param/M_Aymar_1991_J_Phys_B_24.npy')
 n_lowest_valence = 4
 dx = 5e-3
 
-class SingleElectronBase:
-	def __init__(self, n,l,ml,ms):
-		self.n = n
-		self.l = l
-		self.ml = ml
-		self.ms = ms
-		self.get_energy()
-		self.get_ur()
+# class SingleElectronBase:
+# 	def __init__(self, n,l,ml,ms):
+# 		self.n = n
+# 		self.l = l
+# 		self.ml = ml
+# 		self.ms = ms
+# 		self.get_energy()
+# 		self.get_ur()
 
-	def get_energy(self):
-		if not hasattr(self,'_energy'):
-			data = data_ebar[str(self.l)]
-			n_ = data['n']
-			if self.n in n_:
-				self._energy = data['energy/au'][self.n-n_[0]]
-			else:
-				self._energy = -2 / (ebar_qd[str(self.l)](self.n)**2)
-		return self._energy
+# 	def get_energy(self):
+# 		if not hasattr(self,'_energy'):
+# 			data = data_ebar[str(self.l)]
+# 			n_ = data['n']
+# 			if self.n in n_:
+# 				self._energy = data['energy/au'][self.n-n_[0]]
+# 			else:
+# 				self._energy = -2 / (ebar_qd[str(self.l)](self.n)**2)
+# 		return self._energy
 
-	def get_ur(self):
-		if not hasattr(self,'_u_'):
-			self._u_, self._r_ = \
-				integrate(self.l,-1,self._energy, paramss[self.l], 1e-3, self.n*2*(self.n+15), 5e-3, 1e-8,0)
-		return self._u_, self._r_
+# 	def get_ur(self):
+# 		if not hasattr(self,'_u_'):
+# 			self._u_, self._r_ = \
+# 				integrate(self.l,-1,self._energy, paramss[self.l], 1e-3, self.n*2*(self.n+15), 5e-3, 1e-8,0)
+# 		return self._u_, self._r_
 
 def request_energy(n,l, dt_ebar=data_ebar, qdefect=ebar_qd):
 	if str(l) in dt_ebar.keys():
