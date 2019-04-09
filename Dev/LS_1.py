@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from sys import path, exit
+from sys import path
 path.append("./Numerov")
 import pickle
 from numerov import integrate, eigensolve, socXi, uInnerProd_1d
@@ -51,12 +51,12 @@ def request_ur(n,l,dtbs=single_ur_database,Uparams=paramss,dt_ebar=data_ebar, qd
 # 	else:
 # 		return None
 
-def levelAhigher(nlA,nlB,low_bound = n_lowest_valence):
+def levelAlower(nlA,nlB,low_bound = n_lowest_valence):
 	a = 10*nlA[0] + 7*nlA[1]
 	b = 10*nlB[0] + 7*nlB[1]
 	if a < low_bound or b < low_bound:
 		return None
-	return a > b or a==b and nlA[0] > nlB[0]
+	return a < b or a==b and nlA[0] < nlB[0]
 
 def unperturbedEnergy(gamma):
 	return request_energy(*(gamma[:2]))+request_energy(*(gamma[2:]))
@@ -66,8 +66,6 @@ class LS2eState:
 		self.L = L
 		self.S = S
 		self.J = J
-		if levelAhigher(e_config[:2],e_config[2:]):
-			e_config = (*(e_config[2:]),*(e_config[:2]))
 		self.e_config = e_config
 		self.setGammaBasis(gamma_basis)
 		self.coordinates = coordinates
@@ -92,8 +90,6 @@ class LS2eState:
 						continue
 					if self.normalizationFactor(g) == 0:
 						continue
-					if levelAhigher((n1,l1),(n2,l2)): # then swap
-						g = (*(g[2:]),*(g[:2]))
 					if g == self.e_config:
 						idx_in_basis = i
 					self.__gamma_basis.append(g)
@@ -115,11 +111,6 @@ class LS2eState:
 				continue
 			if self.normalizationFactor(g) == 0:
 				continue
-			if levelAhigher((n1,l1),(n2,l2)):
-				g = (*(g[2:]),*(g[:2]))
-			for g1 in self.__gamma_basis:
-				if g==g1:
-					return
 			self.__gamma_basis.append(g)
 
 	def normalizationFactor(self, gamma):
@@ -139,28 +130,25 @@ class LS2eState:
 			raise ValueError("l range does not cover l1=%d or l2=%d"%(l1,l2))
 		g_basis = []
 		for nn1 in range(*n1_range):
-			for ll1 in range(l_range[0],min(l_range[1],nn1)):
-				if levelAhigher((n_lowest_valence,0),(nn1,ll1)):
-					continue
+			# n_lowest_valence <= nn1 + 0.7 ll1
+			for ll1 in range(max(int(np.ceil(10*(n_lowest_valence-nn1)/7)),l_range[0]),min(l_range[1],nn1)):
+
 				# nn1 + 0.7 ll1 <= nn2 + 0.7 ll2 <= nn2 + 0.7 (nn2 - 1) = 1.7 nn2 -0.7
-				for nn2 in range(n2_range[0], n2_range[1]):
+				for nn2 in range(max(int(np.ceil((10*nn1+7*ll1+7)/17)),n2_range[0]), n2_range[1]):
 					# nn1 + 0.7 ll1 <= nn2 + 0.7 ll2
-					for ll2 in range(max(l_range[0],abs(ll1-self.L)),min(l_range[1],nn2,ll1+self.L+1)):
-						if levelAhigher((nn1,ll1),(nn2,ll2)):
-							continue
+					for ll2 in range(max(int(np.ceil((10*nn1+7*ll1-10*nn2)/7)),l_range[0],abs(ll1-self.L)),min(l_range[1],nn2,ll1+self.L+1)):
 						g_basis.append((nn1,ll1,nn2,ll2))
 		self.setGammaBasis(g_basis)
 
 	def displayBasis(self):
-		print("%d e configs in the subspace of (L,S,J)=(%d,%d,%d) are relevant to"%(len(self.__gamma_basis), self.L,self.S,self.J),self.e_config)
-		print(self.__gamma_basis)
+		print("%d states in the subspace of (L,ML,S,MS)=(%d,ML,%d,MS) are relevant"%(len(self.__gamma_basis), self.L,self.S))
+		print("e config.",self.__gamma_basis)
 
 	def _h0diagConstruct(self):
 		self._h0diag = np.asarray([unperturbedEnergy(g) for g in self.__gamma_basis])
 		return self._h0diag
 
 	def _VmatConstruct(self):
-		print("Construct Vmat")
 		self._Vmat = np.empty((len(self.__gamma_basis),len(self.__gamma_basis)),'d')
 		for i,bv in enumerate(self.__gamma_basis):
 			for j_i,bu in tqdm(enumerate(self.__gamma_basis[i:]), desc='Row %d'%i, unit='mat.entry'):
@@ -169,16 +157,6 @@ class LS2eState:
 				if j!= i:
 					self._Vmat[j,i] = self._Vmat[i,j].conj()
 		return self._Vmat
-
-	def _SOCmatConstruct(self):
-		self._SOCmat = np.empty((len(self.__gamma_basis),len(self.__gamma_basis)),'d')
-		for i,bv in enumerate(self.__gamma_basis):
-			for j_i,bu in tqdm(enumerate(self.__gamma_basis[i:]), desc='Row %d'%i, unit='mat.entry'):
-				j = i+j_i
-				self._SOCmat[i,j] = self.SOCmatElement(bv,bu)
-				if j!= i:
-					self._SOCmat[j,i] = self._SOCmat[i,j].conj()
-		return self._SOCmat
 
 	def _SmatConstruct(self):
 		self._Smat = np.identity(len(self.__gamma_basis))
@@ -196,11 +174,7 @@ class LS2eState:
 			self._VmatConstruct()
 		if self._Smat is None or len(self.__gamma_basis)!=self._Smat.shape[0]:
 			self._SmatConstruct()
-		try:
-			H = self._Vmat + np.diag(self._h0diag)
-		except:
-			print(self._Vmat is None)
-			exit(-2)
+		H = self._Vmat + np.diag(self._h0diag)
 		print("Unperturbed energy = %.4f, 1st order perturbed = %.4f"%(self._h0diag[self.idx_in_basis], H[self.idx_in_basis,self.idx_in_basis]))
 		print("Max amplitude of residue S due to radial functions = %.2g"%(abs(self._Smat-np.identity(len(self.__gamma_basis))).max()))
 		w, v = eigh(H, b=self._Smat)
@@ -235,9 +209,13 @@ class LS2eState:
 		"""
 		n1_, l1_, n2_, l2_ = bv
 		n1,  l1,  n2,  l2  = bu
-		normas = self.normalizationFactor(bv)*self.normalizationFactor(bu)
 		v1,rv1 = request_ur(n1_,l1_)
 		v2,rv2 = request_ur(n2_,l2_)
+		u1,ru1 = request_ur(n1,l1)
+		u2,ru2 = request_ur(n2,l2)
+		normas = self.normalizationFactor(bv)*self.normalizationFactor(bu)
+		if normas==0:
+			return 0
 		if ML is None:
 			ML = self.L
 		if MS is None:
@@ -249,12 +227,12 @@ class LS2eState:
 				if abs(angula) < 1e-15:
 					continue
 				M = gridMaxR_l(l,rv1,rv2)
-				radial = radiaV(M,(n1_,l1_),(n2_,l2_),(n1,l1),(n2,l2))
+				radial = radiaV(M,v1,rv1,v2,rv2,u1,ru1,u2,ru2)
 				if n1==n2: 
 					# assert (L+S)%2==0
 					radial += radial
 				else:
-					radial += (-1 if (self.L+self.S)%2==1 else 1)*radiaV(M,(n1_,l1_),(n2_,l2_),(n2,l2),(n1,l1))
+					radial += (-1 if (self.L+self.S)%2==1 else 1)*radiaV(M,v1,rv1,v2,rv2,u2,ru2,u1,ru1)
 				res += radial*angula
 			return res * 2/normas
 		elif l1_==l2_:
@@ -271,7 +249,7 @@ class LS2eState:
 					continue
 				M = gridMaxR_l(l,rv1,rv2)
 				Mdict[l] = M
-				radial = radiaV(M,(n1_,l1_),(n2_,l2_),(n1,l1),(n2,l2))
+				radial = radiaV(M,v1,rv1,v2,rv2,u1,ru1,u2,ru2)
 				res += radial*angula
 			res_ex = 0
 			# swap (l1,l2), (n1,n2), (u1,u2), (ru1,ru2)
@@ -286,38 +264,6 @@ class LS2eState:
 				radial = radiaV(M,v1,rv1,v2,rv2,u2,ru2,u1,ru1)
 				res_ex += radial*angula
 			return (res + (-1 if (self.S+self.L-l1-l2)%2==1 else 1)*res_ex)*2 / normas
-
-	def SOCmatElement(self, bv, bu, MJ=None):
-		if self.S ==0:
-			return 0
-		n1_,l1_,n2_,l2_ = bv
-		n1, l1, n2, l2  = bu
-		normas = self.normalizationFactor(bv)*self.normalizationFactor(bu)
-		if MJ is None:
-			MJ = self.J
-		res_direct = 0
-		if l1_==l1 and l2_==l2:
-			angs = np.asarray([angulaSO(l1,l2,self.L,self.S,self.J,MJ,k) for k in range(2)])
-			v1,rv1 = request_ur(n1_,l1_)
-			v2,rv2 = request_ur(n2_,l2_)
-			u1,ru1 = request_ur(n1,l1)
-			u2,ru2 = request_ur(n2,l2)
-			rads = np.asarray([radiaSO(v1,rv1,v2,rv2,u1,ru1,u2,ru2,k,lk) for k,lk in enumerate([l1,l2])])
-			res_direct = (angs*rads).sum()
-			if l1==l2:
-				pass
-		if not (l1_==l1 and l2_==l2):
-			if not (l1_==l2 and l2_==l1):
-				return 0
-			# assert l1_==l2 and l2_==l1 and (l1_!=l1 or l2_!=l2)
-			# which ensures l1!=l2, so there will be only one term in self.SOCmatElement(bv, bu1, MJ)
-			bu1 = (*(bu[2:]), *(bu[:2]))
-			sgn = -1 if (self.L+self.S-l1-l2)%2==1 else 1
-			return sgn*self.SOCmatElement(bv, bu1, MJ)
-		if MJ is None:
-			MJ = self.J
-
-
 
 def angulaV(l,l1_,l2_,l1,l2, L,ML):
 	# if ML != ML_ or L!=L_:
@@ -340,13 +286,7 @@ def angulaV(l,l1_,l2_,l1,l2, L,ML):
 		res += res_*cf_
 	return N(res)
 
-def radiaV(Ml,nl1_,nl2_,nl1,nl2):
-	# Since Hashing the dict is faster that integration
-	# the radial wavefunctions are only requested when I need the radial integration
-	v1,rv1 = request_ur(*nl1_)
-	v2,rv2 = request_ur(*nl2_)
-	u1,ru1 = request_ur(*nl1)
-	u2,ru2 = request_ur(*nl2)
+def radiaV(Ml,v1,rv1,v2,rv2,u1,ru1,u2,ru2):
 	vM = (v1.reshape(-1,1)*v2.reshape(1,-1))*Ml
 	u= (u1.reshape(-1,1)*u2.reshape(1,-1))
 	return uInnerProd_2d(vM,rv1,rv2, u,ru1,ru2)
@@ -391,35 +331,33 @@ def uInnerProd_2d(v,av,bv,u,au,bu):
 		last_intg = intg
 	return res
 
-def angulaSO(l1,l2,L,S,J,MJ,k):
-	if k==1:
-		return angulaSO(l1,l2,L,S,J,MJ,0)
-	elif k!=0:
-		raise ValueError("k is not in {0,1}, but there are only 2 valence electrons.")
+def angulaSO(L_,S_,L,S,l1,l2,J,MJ,k_is_1):
+	if not k_is_1:
+		return angulaSO(L_,S_,L,S,l2,l1,J,MJ,True)
 	if l1==0:
 		return 0
-	if S==0:
+	if S_==0 and S==0:
 		return 0
 	res = 0
-	for MS_ in range(-S, S+1):
+	for MS_ in range(-S_, S_+1):
 		for MS in range(-S,S+1):
 			ML_ = MJ-MS_
 			ML  = MJ-MS
 			# print("ML_=%d, MS_=%d, ML=%d, MS=%d"%(ML_,MS_,ML,MS),end='\t')
-			cf_ = clebsch_gordan(L,S,J,ML_,MS_,MJ)*clebsch_gordan(L,S,J,ML,MS,MJ)
+			cf_ = clebsch_gordan(L_,S_,J,ML_,MS_,MJ)*clebsch_gordan(L,S,J,ML,MS,MJ)
 			# print("coefficient =",cf_)
 			if cf_==0:
 				continue
 			res_ = 0
 			for ml2 in range(-l2,l2+1):
 				res__ = 0
-				cf__ = clebsch_gordan(l1,l2,L,ML_-ml2,ml2,ML_)*clebsch_gordan(l1,l2,L,ML-ml2,ml2,ML)
+				cf__ = clebsch_gordan(l1,l2,L_,ML_-ml2,ml2,ML_)*clebsch_gordan(l1,l2,L,ML-ml2,ml2,ML)
 				# print("\tml2=%d,ml1_=%d,ml1=%d\tcoefficient ="%(ml2,ML_-ml2,ML-ml2),cf__)
 				if cf__==0:
 					continue
 				for ms2 in [-0.5,0.5]:
 					res___ = 0
-					cf___ =clebsch_gordan(0.5,0.5,S,MS_-ms2,ms2,MS_)*clebsch_gordan(0.5,0.5,S,MS-ms2,ms2,MS)
+					cf___ =clebsch_gordan(0.5,0.5,S_,MS_-ms2,ms2,MS_)*clebsch_gordan(0.5,0.5,S,MS-ms2,ms2,MS)
 					# print("\t\tms2=%.1f,ms1_=%.1f,ms1=%.1f\tcoefficient"%(ms2,MS_-ms2,MS-ms2),cf___)
 					if cf___==0:
 						continue
@@ -438,17 +376,9 @@ def angulaSO(l1,l2,L,S,J,MJ,k):
 			res += N(res_*cf_)
 	return res
 
-def radiaSO(nl1_,nl2_,nl1,nl2, k,lk):
-	# Since Hashing the dict is faster that integration
-	# the radial wavefunctions are only requested when I need the radial integration
-	v1,rv1 = request_ur(*nl1_)
-	v2,rv2 = request_ur(*nl2_)
-	u1,ru1 = request_ur(*nl1)
-	u2,ru2 = request_ur(*nl2)
-	if k==1:
-		return radiaSO(v2,rv2,v1,rv1,u2,ru2,u1,ru1,0,lk)
-	elif k!=0:
-		raise ValueError("k is not in {0,1}, but there are only 2 valence electrons.")
+def radiaSO(v1,rv1,v2,rv2,u1,ru1,u2,ru2, k_is_1,lk):
+	if not k_is_1:
+		return radiaSO(v2,rv2,v1,rv1,u2,ru2,u1,ru1,True,lk)
 	u1 *= socXi(ru1,paramss[lk])
 	return uInnerProd_1d(v1,rv1,u1,ru1)*uInnerProd_1d(v2,rv2,u2,ru2)
 
@@ -463,18 +393,18 @@ if __name__ == '__main__':
 	# print(radiaV(M, u1,r1, u2,r2,u2,r2,u1,r1))
 	# M = gridMaxR_l(0,r1,r2)
 
-	ground = LS2eState(0,0,0,(4,0,4,0))
-	ground.defineBasis_LSrestricted((0,6),(3,6),(3,6))
-	ground.displayBasis()
-	w,v = ground.diagonalizeLS()
+	# ground = LS2eState(0,0,(4,0,4,0))
+	# ground.defineBasis_LSrestricted((0,6),(3,6),(3,6))
+	# ground.displayBasis()
+	# w,v = ground.diagonalizeLS()
 	# np.savez('4s4s_trial0.npz', eigvals=w, eigvecs=v)
-	print(ground._EnergyLS)
+	# print(ground._EnergyLS)
 	# plt.matshow((abs(v)))
 	# plt.savefig("4s4s_trial0.png")
 	
-	# excite1 = LS2eState(1,0,1,(4,0,4,1))
-	# excite1.defineBasis_LSrestricted((0,5),(3,6),(3,6))
-	# excite1.displayBasis()
+	excite1 = LS2eState(1,0,1,(4,0,4,1))
+	excite1.defineBasis_LSrestricted((0,5),(3,6),(3,6))
+	excite1.displayBasis()
 	# t0 = time()
 	# w,v = excite1.diagonalizeLS()
 	# print(excite1._EnergyLS)

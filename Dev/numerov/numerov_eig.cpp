@@ -53,7 +53,10 @@ static PyMethodDef module_methods[] = {
   "\trmax: Boundary of the integration. Empirically rmax = n*2*(n+15) is enough\n"
   "\treturn_vec: Bool value indicating whether to return the eigen vector.\n"
   "Return: eigen_energy, u_k, r_k if return_vec else eigen_energy"},
-  {"socXi",(PyCFunction)NumerovSOCXi, METH_VARARGS, "numerov.socXi"},
+  {"socXi",(PyCFunction)NumerovSOCXi, METH_VARARGS, 
+  "numerov.socXi(r_array, Uparams):\nCalculate 0.5\\alpha^2\\xi(r).\n"
+  "Parameters:\n\tr_array: an array of r\n\tUparams: numpy 1D array of length 4 or 5. Parameters in the model potential. If Uparams.size==4, a4=0 by default, else if Uparams.size==5, fill in (a1,a2,a3,a4,rc) correspondingly.\n"
+  "Return an array of 0.5\\alpha^2\\xi(r), in the same shape as r_array."},
   {"uInnerProd_1d",(PyCFunction)UInnerProd1d, METH_VARARGS, "numerov.uInnerProd"},
   // {"debug",(PyCFunction)NumerovDEBUG, METH_VARARGS, "numerov.debug"},
   {NULL, NULL, 0, NULL}
@@ -524,7 +527,7 @@ static PyObject * UInnerProd1d(PyObject * self, PyObject * args){
 	double * au = (double *)(PyArray_GETPTR1(pyau,0));
 	long kv = 0, ku = 0;
 	double res, last_prod, current_r, av_last, v_last, au_last, u_last, prod, r_incr;
-	res= last_prod= current_r= av_last= v_last= au_last= u_last = 0;
+	res= last_prod= current_r= av_last= v_last= au_last= u_last = prod = r_incr = 0;
 	while(kv<PyArray_SIZE(pyv) && ku<PyArray_SIZE(pyu)){
 		if(av[kv] <= au[ku]){
 			r_incr = av[kv]-current_r;
