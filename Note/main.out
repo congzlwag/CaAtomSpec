@@ -1,0 +1,24 @@
+\BOOKMARK [1][-]{section.1}{Overview}{}% 1
+\BOOKMARK [2][-]{subsection.1.1}{Units and Notation Conventions}{section.1}% 2
+\BOOKMARK [2][-]{subsection.1.2}{Implementation}{section.1}% 3
+\BOOKMARK [1][-]{section.2}{Single Particle States}{}% 4
+\BOOKMARK [2][-]{subsection.2.1}{Model Potential U\(r\)}{section.2}% 5
+\BOOKMARK [2][-]{subsection.2.2}{Radial Equation}{section.2}% 6
+\BOOKMARK [3][-]{subsubsection.2.2.1}{Integration}{subsection.2.2}% 7
+\BOOKMARK [3][-]{subsubsection.2.2.2}{Solving eigen equation}{subsection.2.2}% 8
+\BOOKMARK [2][-]{subsection.2.3}{Assessment of model parameters, in terms of CaII spectra}{section.2}% 9
+\BOOKMARK [2][-]{subsection.2.4}{Extrapolation with quantum defects}{section.2}% 10
+\BOOKMARK [1][-]{section.3}{Coupling to Two-Particle States}{}% 11
+\BOOKMARK [2][-]{subsection.3.1}{Matrix elements}{section.3}% 12
+\BOOKMARK [3][-]{subsubsection.3.1.1}{Electronstatic interaction V}{subsection.3.1}% 13
+\BOOKMARK [3][-]{subsubsection.3.1.2}{Spin-orbit coupling}{subsection.3.1}% 14
+\BOOKMARK [2][-]{subsection.3.2}{Organizing basis}{section.3}% 15
+\BOOKMARK [3][-]{subsubsection.3.2.1}{Evaluating the singlet states}{subsection.3.2}% 16
+\BOOKMARK [1][-]{section.4}{Quantities of Interest}{}% 17
+\BOOKMARK [2][-]{subsection.4.1}{Energy difference between states of interest}{section.4}% 18
+\BOOKMARK [2][-]{subsection.4.2}{Stark shift of high Rydberg states}{section.4}% 19
+\BOOKMARK [2][-]{subsection.4.3}{Linewidth of high Rydberg states}{section.4}% 20
+\BOOKMARK [1][-]{appendix.A}{Subroutine for Ax =Mx}{}% 21
+\BOOKMARK [1][-]{appendix.B}{Implementation of angular and radial integration}{}% 22
+\BOOKMARK [2][-]{subsection.B.1}{angulaV}{appendix.B}% 23
+\BOOKMARK [2][-]{subsection.B.2}{angulaSO}{appendix.B}% 24
